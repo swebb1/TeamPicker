@@ -73,18 +73,24 @@ server <- function(input, output) {
     mt <- t %>% filter(Gender=="M") %>%  
       mutate(Skill=Skill*input$skillWeight,
              Fitness=Fitness*input$fitnessWeight,
-             Score=rowMeans(across(c(Skill,Fitness)))) %>%
-      arrange(Experience,Score) %>% 
-      mutate(Team=rep(1:input$teams,length.out = n()))
+             Score=rowMeans(pick(c(Skill,Fitness)))) %>%
+      arrange(desc(Experience),desc(Score)) %>% 
+      mutate(Team=rep(c(1:input$teams,input$teams:1),length.out = n()))
       
     ft <- t %>% filter(Gender=="F") %>%  
-      mutate(Score=rowMeans(across(c(Skill,Fitness)))) %>%
-      arrange(Experience,Score) %>% 
-      mutate(Team=rep(input$teams:1,length.out = n()))
+      mutate(Score=rowMeans(pick(c(Skill,Fitness)))) %>%
+      arrange(desc(Experience),desc(Score)) %>% 
+      mutate(Team=rep(c(input$teams:1,1:input$teams),length.out = n()))
     
     bind_rows(mt,ft)
     
   })
+  
+  #shuffleTeams<-reactive({
+  #  df<-makeTeams()
+  #  idx=seq(1,nrow(df),by=4) %>% purrr::map(function(x){sample(x:(x+3),4)}) %>% unlist()
+  #  idx
+  #})
   
   output$ts<-DT::renderDataTable({
     df<-makeTeams()
@@ -115,7 +121,6 @@ server <- function(input, output) {
                 Fitness=mean(Fitness),
                 Score=mean(Score)) %>% 
       left_join(df1,by = "Team")
-    
       
     DT::datatable(df2) %>% 
       formatStyle("Team", target = 'row', 
