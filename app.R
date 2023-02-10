@@ -19,7 +19,6 @@ library(purrr)
 library(sortable)
 library(readxl)
 library(writexl)
-library(readr)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
