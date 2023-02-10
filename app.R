@@ -16,6 +16,7 @@ library(DT)
 library(googlesheets4)
 library(tidyr)
 library(purrr)
+library(sortable)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -26,6 +27,10 @@ ui <- fluidPage(
     # Sidebar with a slider input for number of bins 
     sidebarLayout(
         sidebarPanel(
+            textAreaInput("sheet",label="Google sheet URL",
+                          value = "https://docs.google.com/spreadsheets/d/1VH8lKK0qTHybxd5ytf7aeVcl7DklcWvNmwigTEOMvN0/edit?usp=sharing",
+                          placeholder = "Sheet must be in the Glasgow Ultimate google drive with viewer access"),
+            actionButton("upload",label = "Upload Excel sheet",icon = icon(name = "fa-solid fa-upload", lib = "font-awesome")),
             sliderInput("teams",
                         "Number of teams:",
                         min = 2,
@@ -42,8 +47,12 @@ ui <- fluidPage(
                          max=4,
                          value=1),
             checkboxInput("snake","Snake draw",value = T),
-            actionButton("make",label = "Make Teams"),
-            actionButton("shuffle",label = "Shuffle Teams")
+            actionButton("make",label = "Make Teams", icon = icon(name = "fa-solid fa-play", lib = "font-awesome")),
+            actionButton("shuffle",label = "Shuffle Teams", icon = icon(name = "fa-solid fa-shuffle", lib = "font-awesome")),
+            textAreaInput("columns",label = "Column mappings"),
+            uiOutput("experience"),
+            actionButton("save",label = "Download Teams", icon = icon(name = "fa-solid fa-download", lib = "font-awesome")),
+            #img(src='GlasgowUltimateLogo2013.jpg', align = "center")
         ),
 
         # Show a plot of the generated distribution
@@ -61,86 +70,122 @@ ui <- fluidPage(
 server <- function(input, output) {
 
   teamCols<-c("white","darkgrey",prettycols(name = "Summer")[c(1,2,4,10,11)],prettycols(name = "Bold")[c(1,3,4,5)])
+  mcol<-"#102E4A"
+  fcol<-"#17183B"
   
-  t <- read_sheet("https://docs.google.com/spreadsheets/d/1VH8lKK0qTHybxd5ytf7aeVcl7DklcWvNmwigTEOMvN0/edit?usp=sharing")  
-  #t <- data.frame(Name=c("Bob","Ben","Josie","Wendy"),Gender=c("M","M","F","F"),Skill=c(1,5,3,4),Fitness=c(4,4,2,5),Experience=c("Beginner","Intermediate","Experienced","Intermediate"))  
-  #t<-bind_rows(t,t,t,t)
+  gs4_auth(cache = ".secrets", email = "glasgowultimate@googlemail.com")
   
-  exp_levels =c("Beginner","Getting there","Intermediate","Veteran","Elite")
+  exp<-factor(c("Beginner","Getting there","Intermediate","Veteran","Elite"),levels=c(c("Beginner","Getting there","Intermediate","Veteran","Elite")))
+  exp_levels <- reactiveVal(exp)
+  
+  output$experience<-renderUI({
+    tagList(
+      rank_list(text = "Experience order",labels = exp_levels(),input_id = "experience")
+      #rank_list(text = "Experience order",labels = c("Old","Young","Buff"),input_id = "experience")
+    )
+  })
   
   ## Set factor levels
-  t<-t %>% select(Name,Gender,Experience,Skill,Fitness) %>% 
-    mutate(across(c(Gender,Experience),as.factor),
-                    Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"),
-                    Experience = fct_relevel(Experience, exp_levels))
+  fetchSheet<-reactive({
+    tryCatch({
+      s<-read_sheet(input$sheet) %>% 
+      select(Name,Gender,Experience,Skill,Fitness) %>% 
+      mutate(across(c(Gender,Experience),as.factor),
+                      Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
+      
+      exp_levels(s %>% pull(Experience) %>% 
+                   unique() %>% as_factor() %>% 
+                   fct_relevel(levels(exp)) %>% 
+                   levels())
+      
+      return(s)
+      },
+      error = function(e){
+        message("Sheet Not Found")
+        showModal(modalDialog(
+          title = "Error",
+          "Sheet not found"
+        ))
+        return(NULL)
+      }
+    )
+  })
   
   teams<-reactiveVal(NULL)
   teamNum<-reactiveVal(NULL)
   
   observeEvent(input$make,{
     
-    morder=c(1:input$teams,input$teams:1)
-    forder=c(input$teams:1,1:input$teams)
-    
-    if(input$snake==F){
-      morder=c(1:input$teams)
-      forder=c(input$teams:1)
+    if(!is.null(fetchSheet())){
+      morder=c(1:input$teams,input$teams:1)
+      forder=c(input$teams:1,1:input$teams)
+      
+      if(input$snake==F){
+        morder=c(1:input$teams)
+        forder=c(input$teams:1)
+      }
+      
+      sheet<-fetchSheet() %>% 
+        mutate(Experience = fct_relevel(Experience, input$experience))
+      
+      mt <- sheet %>% filter(Gender=="M") %>%  
+        mutate(Skill=Skill*input$skillWeight,
+               Fitness=Fitness*input$fitnessWeight,
+               Score=rowMeans(pick(c(Skill,Fitness)))) %>%
+        arrange(desc(Experience),desc(Score)) %>% 
+        mutate(Team=rep(morder,length.out = n()))
+      
+      ft <- sheet %>% filter(Gender=="F") %>%  
+        mutate(Score=rowMeans(pick(c(Skill,Fitness)))) %>%
+        arrange(desc(Experience),desc(Score)) %>% 
+        mutate(Team=rep(forder,length.out = n()))
+      
+      teamdf<-bind_rows(mt,ft)
+      
+      teams(teamdf)
+      teamNum(input$teams)
     }
-    
-    mt <- t %>% filter(Gender=="M") %>%  
-      mutate(Skill=Skill*input$skillWeight,
-             Fitness=Fitness*input$fitnessWeight,
-             Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-      arrange(desc(Experience),desc(Score)) %>% 
-      mutate(Team=rep(morder,length.out = n()))
-    
-    ft <- t %>% filter(Gender=="F") %>%  
-      mutate(Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-      arrange(desc(Experience),desc(Score)) %>% 
-      mutate(Team=rep(forder,length.out = n()))
-    
-    teamdf<-bind_rows(mt,ft)
-    
-    teams(teamdf)
-    teamNum(input$teams)
-    
   })
   
   observeEvent(input$shuffle,{
     
-    morder=c(1:input$teams,input$teams:1)
-    forder=c(input$teams:1,1:input$teams)
+    if(!is.null(fetchSheet())){
+      morder=c(1:input$teams,input$teams:1)
+      forder=c(input$teams:1,1:input$teams)
+      
+      if(input$snake==F){
+        morder=c(1:input$teams)
+        forder=c(input$teams:1)
+      }
+      
+      sheet<-fetchSheet() %>% 
+        mutate(Experience = fct_relevel(Experience, input$experience))
+      
+      mt <- sheet %>% filter(Gender=="M") %>%  
+        mutate(Skill=Skill*input$skillWeight,
+               Fitness=Fitness*input$fitnessWeight,
+               Score=rowMeans(pick(c(Skill,Fitness)))) %>%
+        arrange(desc(Experience),desc(Score)) 
     
-    if(input$snake==F){
-      morder=c(1:input$teams)
-      forder=c(input$teams:1)
-    }
+      idx<-seq(1,nrow(mt),input$teams) %>% map(function(x){sample(x:min(((x+input$teams)-1),nrow(mt)),min(input$teams,(nrow(mt)-x)+1))}) %>% unlist()
+      mt<-mt[idx,]
+      
+      mt<- mt %>% mutate(Team=rep(morder,length.out = n()))
+      
+      ft <- sheet %>% filter(Gender=="F") %>%  
+        mutate(Score=rowMeans(pick(c(Skill,Fitness)))) %>%
+        arrange(desc(Experience),desc(Score))
+      
+      idx<-seq(1,nrow(ft),input$teams) %>% map(function(x){sample(x:min(((x+input$teams)-1),nrow(ft)),min(input$teams,(nrow(ft)-x)+1))}) %>% unlist()
+      ft<-ft[idx,]
+      
+      ft<- ft %>% mutate(Team=rep(forder,length.out = n()))
+      
+      teamdf<-bind_rows(mt,ft)
     
-    mt <- t %>% filter(Gender=="M") %>%  
-      mutate(Skill=Skill*input$skillWeight,
-             Fitness=Fitness*input$fitnessWeight,
-             Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-      arrange(desc(Experience),desc(Score)) 
-  
-    idx<-seq(1,nrow(mt),input$teams) %>% map(function(x){sample(x:min(((x+input$teams)-1),nrow(mt)),min(input$teams,(nrow(mt)-x)+1))}) %>% unlist()
-    mt<-mt[idx,]
-    
-    mt<- mt %>% mutate(Team=rep(morder,length.out = n()))
-    
-    ft <- t %>% filter(Gender=="F") %>%  
-      mutate(Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-      arrange(desc(Experience),desc(Score))
-    
-    idx<-seq(1,nrow(ft),input$teams) %>% map(function(x){sample(x:min(((x+input$teams)-1),nrow(ft)),min(input$teams,(nrow(ft)-x)+1))}) %>% unlist()
-    ft<-ft[idx,]
-    
-    ft<- ft %>% mutate(Team=rep(forder,length.out = n()))
-    
-    teamdf<-bind_rows(mt,ft)
-  
-    teams(teamdf)
-    teamNum(input$teams)
-    
+      teams(teamdf)
+      teamNum(input$teams)
+    }  
   })
   
   output$ts<-DT::renderDataTable({
@@ -150,7 +195,9 @@ server <- function(input, output) {
       DT::datatable(df,options = list(pageLength = 50, info = FALSE,
                                      lengthMenu = list(c(50, -1), c("50", "All")))) %>% 
         formatStyle("Team", target = 'row', 
-                    backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()]))
+                    backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()])) %>% 
+        formatStyle("Name", "Gender",color=styleEqual(c("F","M"),c(fcol,mcol)))
+      
     }
   })
   
@@ -160,9 +207,12 @@ server <- function(input, output) {
         arrange(Team,Gender,Experience,Score)
       
       DT::datatable(df,
-                    options = list(pageLength = -1, info = FALSE)) %>% 
+                    options = list(pageLength = -1, info = FALSE,
+                                   lengthMenu = list(c(-1,50), c("All","50")))) %>% 
         formatStyle("Team", target = 'row', 
-                    backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()]))
+                    backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()])) %>% 
+        formatStyle("Name", "Gender",color=styleEqual(c("F","M"),c(fcol,mcol)))
+      
     }
   })
   
@@ -175,8 +225,10 @@ server <- function(input, output) {
         pivot_wider(id_cols = Player,names_from = Team,values_from = Name)
       
       dt<-DT::datatable(df,
-                    options = list(pageLength = -1, info = FALSE)) #%>% 
-        #formatStyle(names(df)[-1] %>% as.list(), backgroundColor=teamCols[1:teamNum()] %>% as.list())
+                    options = list(pageLength = -1, info = FALSE,
+                                   lengthMenu = list(c(-1,50), c("All","50")))) %>% 
+        formatStyle(names(df)[-1], color=styleEqual(teams() %>% filter(Gender=="F") %>% pull(Name),fcol)) %>% 
+        formatStyle(names(df)[-1], color=styleEqual(teams() %>% filter(Gender=="M") %>% pull(Name),mcol))
       
       1:teamNum() %>% map(function(x){
         dt <<- dt %>% formatStyle(as.character(x),backgroundColor = teamCols[x])
@@ -191,7 +243,8 @@ server <- function(input, output) {
       df<-teams() %>% group_by(Team)
       
       df1<-df %>% count(Experience) %>% 
-        pivot_wider(Team,names_from = Experience,values_from = n)
+        pivot_wider(Team,names_from = Experience,values_from = n) %>% 
+        select(Team,all_of(exp_levels()))
         
       df2<-df %>% 
         summarise(Male=sum(Gender=="M"),
@@ -201,7 +254,8 @@ server <- function(input, output) {
                   Score=mean(Score)) %>% 
         left_join(df1,by = "Team")
         
-      DT::datatable(df2,options = list(pageLength = -1, info = FALSE)) %>% 
+      DT::datatable(df2,options = list(pageLength = -1, info = FALSE,
+                                       lengthMenu = list(c(-1,50), c("All","50")))) %>% 
         formatStyle("Team", target = 'row', 
                     backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()]))
     }
