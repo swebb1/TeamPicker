@@ -17,6 +17,9 @@ library(googlesheets4)
 library(tidyr)
 library(purrr)
 library(sortable)
+library(readxl)
+library(writexl)
+library(readr)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -30,7 +33,7 @@ ui <- fluidPage(
             textAreaInput("sheet",label="Google sheet URL",
                           value = "https://docs.google.com/spreadsheets/d/1VH8lKK0qTHybxd5ytf7aeVcl7DklcWvNmwigTEOMvN0/edit?usp=sharing",
                           placeholder = "Sheet must be in the Glasgow Ultimate google drive with viewer access"),
-            actionButton("upload",label = "Upload Excel sheet",icon = icon(name = "fa-solid fa-upload", lib = "font-awesome")),
+            fileInput("upload","Upload Excel file",accept = c(".xlsx")),
             sliderInput("teams",
                         "Number of teams:",
                         min = 2,
@@ -51,7 +54,8 @@ ui <- fluidPage(
             actionButton("shuffle",label = "Shuffle Teams", icon = icon(name = "fa-solid fa-shuffle", lib = "font-awesome")),
             textAreaInput("columns",label = "Column mappings"),
             uiOutput("experience"),
-            actionButton("save",label = "Download Teams", icon = icon(name = "fa-solid fa-download", lib = "font-awesome")),
+            textInput("saveFile","File name",value = "Teams"),
+            downloadButton("save", "Download Teams")
             #img(src='GlasgowUltimateLogo2013.jpg', align = "center")
         ),
 
@@ -87,28 +91,55 @@ server <- function(input, output) {
   
   ## Set factor levels
   fetchSheet<-reactive({
-    tryCatch({
-      s<-read_sheet(input$sheet) %>% 
-      select(Name,Gender,Experience,Skill,Fitness) %>% 
-      mutate(across(c(Gender,Experience),as.factor),
-                      Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
-      
-      exp_levels(s %>% pull(Experience) %>% 
-                   unique() %>% as_factor() %>% 
-                   fct_relevel(levels(exp)) %>% 
-                   levels())
-      
-      return(s)
-      },
-      error = function(e){
-        message("Sheet Not Found")
-        showModal(modalDialog(
-          title = "Error",
-          "Sheet not found"
-        ))
-        return(NULL)
-      }
-    )
+    if(!is.null(input$upload)){
+      tryCatch(
+        {
+          print(input$upload$datapath)
+          s<-read_xlsx(input$upload$datapath) %>% 
+            select(Name,Gender,Experience,Skill,Fitness) %>% 
+            mutate(across(c(Gender,Experience),as.factor),
+                   Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
+          
+          exp_levels(s %>% pull(Experience) %>% 
+                       unique() %>% as_factor() %>% 
+                       fct_relevel(levels(exp)) %>% 
+                       levels())
+          return(s)
+        },
+        error = function(e){
+          message("Cannot upload file")
+          showModal(modalDialog(
+            title = "Error",
+            "Cannot upload file"
+          ))
+          return(NULL)
+        }
+      )
+    }
+    else{
+      tryCatch({
+        s<-read_sheet(input$sheet) %>% 
+        select(Name,Gender,Experience,Skill,Fitness) %>% 
+        mutate(across(c(Gender,Experience),as.factor),
+                        Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
+        
+        exp_levels(s %>% pull(Experience) %>% 
+                     unique() %>% as_factor() %>% 
+                     fct_relevel(levels(exp)) %>% 
+                     levels())
+        
+        return(s)
+        },
+        error = function(e){
+          message("Sheet Not Found")
+          showModal(modalDialog(
+            title = "Error",
+            "Sheet not found"
+          ))
+          return(NULL)
+        }
+      )
+    }
   })
   
   teams<-reactiveVal(NULL)
@@ -216,13 +247,23 @@ server <- function(input, output) {
     }
   })
   
-  output$shortTeamsTable<-DT::renderDataTable({
+  shortTeams<-reactive({
     if(!is.null(teams())){
       df<-teams() %>% 
         select(Name,Team) %>% 
         group_by(Team) %>% 
         mutate(Player=1:n()) %>% 
         pivot_wider(id_cols = Player,names_from = Team,values_from = Name)
+      df
+    }
+    else{
+      NULL
+    }
+  })
+  
+  output$shortTeamsTable<-DT::renderDataTable({
+    if(!is.null(teams())){
+      df<-shortTeams()
       
       dt<-DT::datatable(df,
                     options = list(pageLength = -1, info = FALSE,
@@ -259,7 +300,17 @@ server <- function(input, output) {
         formatStyle("Team", target = 'row', 
                     backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()]))
     }
-})
+  })
+  
+  # Download teams
+  output$save <- downloadHandler(
+    filename = function() {
+      paste0(input$saveFile,".xlsx")
+    },
+    content = function(file) {
+      write_xlsx(shortTeams(),file,col_names = T,format_headers = T)
+    }
+  )
     
 }
 
