@@ -64,7 +64,9 @@ ui <- fluidPage(
           tabsetPanel(type = "tabs",
                       tabPanel("Raw", DT::dataTableOutput("raw")),
                       tabPanel("Player ranking", DT::dataTableOutput("ts")),
-                      tabPanel("Team summary", DT::dataTableOutput("shortTeamsTable"),DT::dataTableOutput("teamsSummary")),
+                      tabPanel("Team summary", DT::dataTableOutput("shortTeamsTable"),
+                               DT::dataTableOutput("teamsSummary"),
+                               DT::dataTableOutput("availSummary")),
                       tabPanel("Full team info",DT::dataTableOutput("teamsTable")) 
           )
         )
@@ -213,7 +215,7 @@ server <- function(input, output) {
         select(all_of(columns()),Availability)
       
       if(!is.null(input$avail)){
-        sheet<-sheet %>% mutate(across(all_of(input$avail),case_when(.=="Y"~1,.=="Yes"~1,.=="N"~0,.=="No"~0,.=="M"~0.5,.=="Maybe"~0.5,.default = 0))) %>%  
+        sheet<-sheet %>% mutate(across(all_of(input$avail),~case_when(.=="Y"~1,.=="Yes"~1,.=="N"~0,.=="No"~0,.=="M"~0.5,.=="Maybe"~0.5,.default = 0))) %>% 
           mutate(Availability=rowSums(pick(all_of(input$avail))))
       }
       
@@ -330,6 +332,20 @@ server <- function(input, output) {
         left_join(df1,by = "Team")
         
       DT::datatable(df2,options = list(pageLength = -1, info = FALSE,
+                                       lengthMenu = list(c(-1,50), c("All","50")))) %>% 
+        formatStyle("Team", target = 'row', 
+                    backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()]))
+    }
+  })
+  
+  output$availSummary<-DT::renderDataTable({
+    if(!is.null(teams()) & !is.null(input$avail)){
+      
+      df<-teams() %>% select(Team,Gender,Experience,all_of(input$avail)) %>%
+        summarise(across(all_of(input$avail),sum),.by = c(Team,Gender,Experience)) %>% 
+        arrange(Team,Experience,Gender)
+      
+      DT::datatable(df,options = list(pageLength = -1, info = FALSE,
                                        lengthMenu = list(c(-1,50), c("All","50")))) %>% 
         formatStyle("Team", target = 'row', 
                     backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()]))
