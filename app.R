@@ -49,10 +49,11 @@ ui <- fluidPage(
                          max=4,
                          value=1),
             checkboxInput("snake","Snake draw",value = T),
-            actionButton("make",label = "Make Teams", icon = icon(name = "fa-solid fa-play", lib = "font-awesome")),
-            actionButton("shuffle",label = "Shuffle Teams", icon = icon(name = "fa-solid fa-shuffle", lib = "font-awesome")),
+            actionButton("make",label = "Make Teams", icon = icon(name = "play", lib = "font-awesome")),
+            actionButton("shuffle",label = "Shuffle Teams", icon = icon(name = "shuffle", lib = "font-awesome")),
             textAreaInput("columns",label = "Column mappings"),
             uiOutput("experience"),
+            uiOutput("availability"),
             textInput("saveFile","File name",value = "Teams"),
             downloadButton("save", "Download Teams")
             #img(src='GlasgowUltimateLogo2013.jpg', align = "center")
@@ -61,6 +62,7 @@ ui <- fluidPage(
         # Show a plot of the generated distribution
         mainPanel(
           tabsetPanel(type = "tabs",
+                      tabPanel("Raw", DT::dataTableOutput("raw")),
                       tabPanel("Player ranking", DT::dataTableOutput("ts")),
                       tabPanel("Team summary", DT::dataTableOutput("shortTeamsTable"),DT::dataTableOutput("teamsSummary")),
                       tabPanel("Full team info",DT::dataTableOutput("teamsTable")) 
@@ -80,12 +82,22 @@ server <- function(input, output) {
   
   exp<-factor(c("Beginner","Getting there","Intermediate","Veteran","Elite"),levels=c(c("Beginner","Getting there","Intermediate","Veteran","Elite")))
   exp_levels <- reactiveVal(exp)
-  
+  column_vals <- c("Name","Gender","Experience","Skill","Fitness")
+
+  columns<-reactive({
+    c(column_vals,input$avail)
+  })
+    
   output$experience<-renderUI({
     tagList(
       rank_list(text = "Experience order",labels = exp_levels(),input_id = "experience")
-      #rank_list(text = "Experience order",labels = c("Old","Young","Buff"),input_id = "experience")
     )
+  })
+  
+  output$availability<-renderUI({
+    tagList(
+      selectInput(inputId = "avail",label="Select date columns:",multiple = T,selectize = T,choices = names(fetchSheet()))
+         )
   })
   
   ## Set factor levels
@@ -95,7 +107,7 @@ server <- function(input, output) {
         {
           print(input$upload$datapath)
           s<-read_xlsx(input$upload$datapath) %>% 
-            select(Name,Gender,Experience,Skill,Fitness) %>% 
+            #select(Name,Gender,Experience,Skill,Fitness) %>% 
             mutate(across(c(Gender,Experience),as.factor),
                    Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
           
@@ -118,7 +130,7 @@ server <- function(input, output) {
     else{
       tryCatch({
         s<-read_sheet(input$sheet) %>% 
-        select(Name,Gender,Experience,Skill,Fitness) %>% 
+        #select(Name,Gender,Experience,Skill,Fitness) %>% 
         mutate(across(c(Gender,Experience),as.factor),
                         Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
         
@@ -156,18 +168,25 @@ server <- function(input, output) {
       }
       
       sheet<-fetchSheet() %>% 
-        mutate(Experience = fct_relevel(Experience, input$experience))
+        mutate(Experience = fct_relevel(Experience, input$experience),
+               Availability=1) %>% 
+        select(all_of(columns()),Availability)
+      
+      if(!is.null(input$avail)){
+        sheet<-sheet %>% mutate(across(all_of(input$avail),~case_when(.=="Y"~1,.=="Yes"~1,.=="N"~0,.=="No"~0,.=="M"~0.5,.=="Maybe"~0.5,.default = 0))) %>% 
+          mutate(Availability=rowSums(pick(all_of(input$avail))))
+      }
       
       mt <- sheet %>% filter(Gender=="M") %>%  
         mutate(Skill=Skill*input$skillWeight,
                Fitness=Fitness*input$fitnessWeight,
                Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-        arrange(desc(Experience),desc(Score)) %>% 
+        arrange(desc(Experience),desc(Availability),desc(Score)) %>% 
         mutate(Team=rep(morder,length.out = n()))
       
       ft <- sheet %>% filter(Gender=="F") %>%  
         mutate(Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-        arrange(desc(Experience),desc(Score)) %>% 
+        arrange(desc(Experience),desc(Availability),desc(Score)) %>% 
         mutate(Team=rep(forder,length.out = n()))
       
       teamdf<-bind_rows(mt,ft)
@@ -189,13 +208,20 @@ server <- function(input, output) {
       }
       
       sheet<-fetchSheet() %>% 
-        mutate(Experience = fct_relevel(Experience, input$experience))
+        mutate(Experience = fct_relevel(Experience, input$experience),
+               Availability=1) %>% 
+        select(all_of(columns()),Availability)
+      
+      if(!is.null(input$avail)){
+        sheet<-sheet %>% mutate(across(all_of(input$avail),case_when(.=="Y"~1,.=="Yes"~1,.=="N"~0,.=="No"~0,.=="M"~0.5,.=="Maybe"~0.5,.default = 0))) %>%  
+          mutate(Availability=rowSums(pick(all_of(input$avail))))
+      }
       
       mt <- sheet %>% filter(Gender=="M") %>%  
         mutate(Skill=Skill*input$skillWeight,
                Fitness=Fitness*input$fitnessWeight,
                Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-        arrange(desc(Experience),desc(Score)) 
+        arrange(desc(Experience),desc(Availability),desc(Score)) 
     
       idx<-seq(1,nrow(mt),input$teams) %>% map(function(x){sample(x:min(((x+input$teams)-1),nrow(mt)),min(input$teams,(nrow(mt)-x)+1))}) %>% unlist()
       mt<-mt[idx,]
@@ -204,7 +230,7 @@ server <- function(input, output) {
       
       ft <- sheet %>% filter(Gender=="F") %>%  
         mutate(Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-        arrange(desc(Experience),desc(Score))
+        arrange(desc(Experience),desc(Availability),desc(Score))
       
       idx<-seq(1,nrow(ft),input$teams) %>% map(function(x){sample(x:min(((x+input$teams)-1),nrow(ft)),min(input$teams,(nrow(ft)-x)+1))}) %>% unlist()
       ft<-ft[idx,]
@@ -216,6 +242,15 @@ server <- function(input, output) {
       teams(teamdf)
       teamNum(input$teams)
     }  
+  })
+  
+  output$raw<-DT::renderDataTable({
+    if(!is.null(fetchSheet())){
+      df<-fetchSheet()
+      
+      DT::datatable(df,options = list(pageLength = 50, info = FALSE,
+                                      lengthMenu = list(c(50,100,150,-1), c("50","100","150","All"))))
+    }
   })
   
   output$ts<-DT::renderDataTable({
