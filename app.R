@@ -24,50 +24,74 @@ library(writexl)
 ui <- fluidPage(
 
     # Application title
-    titlePanel("Team Picker"),
-
+    #titlePanel("Team Picker"),
+    titlePanel(title=div(img(src="GlasgowUltimateLogo2013.jpg",height="10%", width="10%"), "TeamPicker",style="position:fixed")),
+    br(),
+    br(),
+    br(),
+    br(),
+  
     # Sidebar with a slider input for number of bins 
     sidebarLayout(
         sidebarPanel(
-            textAreaInput("sheet",label="Google sheet URL",
+          fluidRow(
+            actionButton("make",label = "Make Teams", icon = icon(name = "play", lib = "font-awesome",style="color:white"),style="background-color: #5D70AC;color:white"),
+            actionButton("shuffle",label = "Shuffle Teams", icon = icon(name = "shuffle", lib = "font-awesome",style="color:white"),style="background-color:#71B48D;color:white"),
+            style = "padding:10px"
+          ),
+          fluidRow(
+          tabsetPanel(
+            tabPanel("Input", fluid = TRUE,
+              br(),
+              textAreaInput("sheet",label="Google sheet URL",
                           value = "https://docs.google.com/spreadsheets/d/1VH8lKK0qTHybxd5ytf7aeVcl7DklcWvNmwigTEOMvN0/edit?usp=sharing",
                           placeholder = "Sheet must be in the Glasgow Ultimate google drive with viewer access"),
-            fileInput("upload","Upload Excel file",accept = c(".xlsx")),
-            sliderInput("teams",
+              fileInput("upload","Upload Excel file",accept = c(".xlsx"))
+            ),
+            tabPanel("Team Options", fluid = TRUE,
+              br(),
+              sliderInput("teams",
                         "Number of teams:",
                         min = 2,
                         max = 50,
                         value = 4),
-            numericInput("skillWeight",
+              numericInput("skillWeight",
                          "Skill weight:",
                          min=0,
                          max=4,
                          value=1),
-            numericInput("fitnessWeight",
+              numericInput("fitnessWeight",
                          "Fitness weight:",
                          min=0,
                          max=4,
                          value=1),
-            checkboxInput("snake","Snake draw",value = T),
-            actionButton("make",label = "Make Teams", icon = icon(name = "play", lib = "font-awesome")),
-            actionButton("shuffle",label = "Shuffle Teams", icon = icon(name = "shuffle", lib = "font-awesome")),
-            textAreaInput("columns",label = "Column mappings"),
-            uiOutput("experience"),
-            uiOutput("availability"),
-            textInput("saveFile","File name",value = "Teams"),
-            downloadButton("save", "Download Teams")
+              checkboxInput("snake","Snake draw",value = T)
+            ),
+            tabPanel("Customisation", fluid = TRUE,
+              br(),
+              textAreaInput("columns",label = "Column mappings"),
+              uiOutput("experience"),
+              uiOutput("availability")
+            ),
+            footer = tagList(
+              textInput("saveFile","File name",value = "Teams"),
+              downloadButton("save", "Download Teams")
+            ),
+          ),
+          style = "padding:10px"
+          )
             #img(src='GlasgowUltimateLogo2013.jpg', align = "center")
         ),
 
         # Show a plot of the generated distribution
         mainPanel(
           tabsetPanel(type = "tabs",
-                      tabPanel("Raw", DT::dataTableOutput("raw")),
-                      tabPanel("Player ranking", DT::dataTableOutput("ts")),
-                      tabPanel("Team summary", DT::dataTableOutput("shortTeamsTable"),
+                      tabPanel("Player ranking",  br(),DT::dataTableOutput("ts")),
+                      tabPanel("Raw data", br(),DT::dataTableOutput("raw")),
+                      tabPanel("Team summary",  br(),DT::dataTableOutput("shortTeamsTable"),
                                DT::dataTableOutput("teamsSummary"),
                                DT::dataTableOutput("availSummary")),
-                      tabPanel("Full team info",DT::dataTableOutput("teamsTable")) 
+                      tabPanel("Full team info", br(),DT::dataTableOutput("teamsTable")) 
           )
         )
     )
