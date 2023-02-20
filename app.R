@@ -8,10 +8,10 @@
 #
 
 library(shiny)
+library(shinyjs)
 library(dplyr)
 library(magrittr)
 library(forcats)
-library(PrettyCols)
 library(DT)
 library(googlesheets4)
 library(tidyr)
@@ -100,20 +100,23 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
 
-  teamCols<-c("white","darkgrey",prettycols(name = "Summer")[c(1,2,4,10,11)],prettycols(name = "Bold")[c(1,3,4,5)])
-  mcol<-"#102E4A"
-  fcol<-"#17183B"
+  teamCols<-c("white",paletteer::paletteer_d("rcartocolor::Pastel", 12))
+  mcol<-"#0F3045"
+  fcol<-"#570049"
+  
+  disable("make")
+  disable("shuffle")
   
   gs4_auth(cache = ".secrets", email = "glasgowultimate@googlemail.com")
   
+  ## UI values and reactives
   exp<-factor(c("Beginner","Getting there","Intermediate","Veteran","Elite"),levels=c(c("Beginner","Getting there","Intermediate","Veteran","Elite")))
   exp_levels <- reactiveVal(exp)
   column_vals <- c("Name","Gender","Experience","Skill","Fitness")
-  
   columns<-reactive({
     c(column_vals,input$avail)
   })
-    
+  
   output$experience<-renderUI({
     tagList(
       rank_list(text = "Experience order",labels = exp_levels(),input_id = "experience")
@@ -128,7 +131,27 @@ server <- function(input, output) {
   })
   outputOptions(output, 'availability', suspendWhenHidden=FALSE)
   
-  ## Set factor levels
+  ## Reactive values and functions
+  teams<-reactiveVal(NULL)
+  teamNum<-reactiveVal(NULL)
+  lock_idx<-reactiveVal(NULL)
+  
+  locked<-reactive({
+    df=shortTeams() %>% as.data.frame()
+    idx=input$shortTeamsTable_cells_selected
+    lock=df[idx]
+    lock_idx(idx)
+    lock
+  })
+  
+  swap_idx<-function(x,idx){
+    pos=which(idx==x)
+    sw=idx[x]
+    idx[x]=idx[pos]
+    idx[pos]=sw
+    idx
+  }
+  
   fetchSheet<-reactive({
     if(!is.null(input$upload)){
       tryCatch(
@@ -143,6 +166,8 @@ server <- function(input, output) {
                        unique() %>% as_factor() %>% 
                        fct_relevel(levels(exp)) %>% 
                        levels())
+          
+          enable("make")
           return(s)
         },
         error = function(e){
@@ -167,6 +192,7 @@ server <- function(input, output) {
                      fct_relevel(levels(exp)) %>% 
                      levels())
         
+        enable("make")
         return(s)
         },
         error = function(e){
@@ -180,18 +206,6 @@ server <- function(input, output) {
       )
     }
   })
-  
-  teams<-reactiveVal(NULL)
-  teamNum<-reactiveVal(NULL)
-  locked<-reactiveVal(c("Varun"))
-  
-  swap_idx<-function(x,idx,df){
-    pos=which(idx==x)
-    sw=idx[x]
-    idx[x]=idx[pos]
-    idx[pos]=sw
-    idx
-  }
     
   observeEvent(input$make,{
     
@@ -230,82 +244,63 @@ server <- function(input, output) {
       
       teams(teamdf)
       teamNum(input$teams)
+      lock_idx(NULL)
+      enable("shuffle")
     }
   })
   
   observeEvent(input$shuffle,{
     
+    ## Work out team ordering, do females in reverse so last team gets first pick
     if(!is.null(teams()) & !is.null(teamNum())){
       morder=c(1:teamNum(),teamNum():1)
       forder=c(teamNum():1,1:teamNum())
       
+      ## If not snakedraw then just cycle through picks 
       if(input$snake==F){
         morder=c(1:teamNum())
         forder=c(teamNum():1)
       }
       
-      #sheet<-fetchSheet() %>% 
-      #  mutate(Experience = fct_relevel(Experience, input$experience),
-      #         Availability=1) %>% 
-      #  select(all_of(columns()),Availability)
-      
-      #if(!is.null(input$avail)){
-      #  sheet<-sheet %>% mutate(across(all_of(input$avail),~case_when(.=="Y"~1,.=="Yes"~1,.=="N"~0,.=="No"~0,.=="M"~0.5,.=="Maybe"~0.5,.default = 0))) %>% 
-      #    mutate(Availability=rowSums(pick(all_of(input$avail))))
-      #}
-      
+      ## Get current teams
       sheet<-teams()
       
-      if(!is.null(input$shortTeamsTable_cells_selected)){
-        print(input$shorTeamsTable_cells_selected)
-        #locked <- sheet %>% filter(Name %in% locked())
-        #sheet <- sheet %>% filter(!Name %in% locked())
-        locked <- which(sheet$Name %in% locked())
-      }
+      ## Look for locks
+      msheet <- sheet %>% filter(Gender == "M")
+      fsheet <- sheet %>% filter(Gender == "F")
+      locked_idx_m <- which(msheet$Name %in% locked())
+      locked_idx_f <- which(fsheet$Name %in% locked())
       
-      mt <- sheet %>% filter(Gender=="M") %>%  
-        mutate(Skill=Skill*input$skillWeight,
-               Fitness=Fitness*input$fitnessWeight,
-               Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-        arrange(desc(Experience),desc(Availability),desc(Score)) 
-    
+      ## Shuffle Males within player number
+      mt <- sheet %>% filter(Gender=="M") 
       idx<-seq(1,nrow(mt),teamNum()) %>% map(function(x){sample(x:min(((x+teamNum())-1),nrow(mt)),min(teamNum(),(nrow(mt)-x)+1))}) %>% unlist()
       
-      if(!is.null(locked())){
-        newidx=idx
-        for(i in locked){
-          newidx=swap_idx(i,newidx,teamdf)
-        }
-        idx=newidx
-        #teamdf<-bind_rows(teamdf,locked) %>% 
-        #  arrange(Gender,desc(Experience),desc(Availability),desc(Score))
+      ## Swap back the locked positions
+      newidx=idx
+      for(i in locked_idx_m){
+        newidx=swap_idx(i,newidx)
       }
+      idx=newidx
       
+      ## Pick new teams
       mt<-mt[idx,]
-      
       mt<- mt %>% mutate(Team=rep(morder,length.out = n()))
       
-      ft <- sheet %>% filter(Gender=="F") %>%  
-        mutate(Score=rowMeans(pick(c(Skill,Fitness)))) %>%
-        arrange(desc(Experience),desc(Availability),desc(Score))
-      
+      ## Repeat for female side
+      ft <- sheet %>% filter(Gender=="F")
       idx<-seq(1,nrow(ft),teamNum()) %>% map(function(x){sample(x:min(((x+teamNum())-1),nrow(ft)),min(teamNum(),(nrow(ft)-x)+1))}) %>% unlist()
-      ft<-ft[idx,]
       
+      newidx=idx
+      for(i in locked_idx_f){
+        newidx=swap_idx(i,newidx)
+      }
+      idx=newidx
+      
+      ft<-ft[idx,]
       ft<- ft %>% mutate(Team=rep(forder,length.out = n()))
       
+      ## Binf M & F and update teams
       teamdf<-bind_rows(mt,ft)
-      
-      if(!is.null(locked())){
-        newidx=idx
-        for(i in locked){
-          newidx=swap_idx(i,newidx,teamdf)
-        }
-        idx=newidx
-        #teamdf<-bind_rows(teamdf,locked) %>% 
-        #  arrange(Gender,desc(Experience),desc(Availability),desc(Score))
-      }
-    
       teams(teamdf)
     
     }  
@@ -366,7 +361,7 @@ server <- function(input, output) {
     if(!is.null(teams())){
       df<-shortTeams()
       
-      dt<-DT::datatable(df,selection=list(target = 'cell'),
+      dt<-DT::datatable(df,selection=list(target = 'cell',selected = lock_idx()),
                     options = list(pageLength = -1, info = FALSE,
                                    lengthMenu = list(c(-1,50), c("All","50")))) %>% 
         formatStyle(names(df)[-1], color=styleEqual(teams() %>% filter(Gender=="F") %>% pull(Name),fcol)) %>% 
