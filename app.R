@@ -86,8 +86,8 @@ ui <- fluidPage(
         # Show a plot of the generated distribution
         mainPanel(
           tabsetPanel(type = "tabs",
-                      tabPanel("Player ranking",  br(),DT::dataTableOutput("ts")),
                       tabPanel("Raw data", br(),DT::dataTableOutput("raw")),
+                      tabPanel("Player ranking",  br(),DT::dataTableOutput("ts")),
                       tabPanel("Team summary",  br(),DT::dataTableOutput("shortTeamsTable"),
                                DT::dataTableOutput("teamsSummary"),
                                DT::dataTableOutput("availSummary")),
@@ -109,7 +109,7 @@ server <- function(input, output) {
   exp<-factor(c("Beginner","Getting there","Intermediate","Veteran","Elite"),levels=c(c("Beginner","Getting there","Intermediate","Veteran","Elite")))
   exp_levels <- reactiveVal(exp)
   column_vals <- c("Name","Gender","Experience","Skill","Fitness")
-
+  
   columns<-reactive({
     c(column_vals,input$avail)
   })
@@ -119,12 +119,14 @@ server <- function(input, output) {
       rank_list(text = "Experience order",labels = exp_levels(),input_id = "experience")
     )
   })
+  outputOptions(output, 'experience', suspendWhenHidden=FALSE)
   
   output$availability<-renderUI({
     tagList(
       selectInput(inputId = "avail",label="Select date columns:",multiple = T,selectize = T,choices = names(fetchSheet()))
          )
   })
+  outputOptions(output, 'availability', suspendWhenHidden=FALSE)
   
   ## Set factor levels
   fetchSheet<-reactive({
@@ -181,7 +183,16 @@ server <- function(input, output) {
   
   teams<-reactiveVal(NULL)
   teamNum<-reactiveVal(NULL)
+  locked<-reactiveVal(c("Varun"))
   
+  swap_idx<-function(x,idx,df){
+    pos=which(idx==x)
+    sw=idx[x]
+    idx[x]=idx[pos]
+    idx[pos]=sw
+    idx
+  }
+    
   observeEvent(input$make,{
     
     if(!is.null(fetchSheet())){
@@ -224,23 +235,32 @@ server <- function(input, output) {
   
   observeEvent(input$shuffle,{
     
-    if(!is.null(fetchSheet())){
-      morder=c(1:input$teams,input$teams:1)
-      forder=c(input$teams:1,1:input$teams)
+    if(!is.null(teams()) & !is.null(teamNum())){
+      morder=c(1:teamNum(),teamNum():1)
+      forder=c(teamNum():1,1:teamNum())
       
       if(input$snake==F){
-        morder=c(1:input$teams)
-        forder=c(input$teams:1)
+        morder=c(1:teamNum())
+        forder=c(teamNum():1)
       }
       
-      sheet<-fetchSheet() %>% 
-        mutate(Experience = fct_relevel(Experience, input$experience),
-               Availability=1) %>% 
-        select(all_of(columns()),Availability)
+      #sheet<-fetchSheet() %>% 
+      #  mutate(Experience = fct_relevel(Experience, input$experience),
+      #         Availability=1) %>% 
+      #  select(all_of(columns()),Availability)
       
-      if(!is.null(input$avail)){
-        sheet<-sheet %>% mutate(across(all_of(input$avail),~case_when(.=="Y"~1,.=="Yes"~1,.=="N"~0,.=="No"~0,.=="M"~0.5,.=="Maybe"~0.5,.default = 0))) %>% 
-          mutate(Availability=rowSums(pick(all_of(input$avail))))
+      #if(!is.null(input$avail)){
+      #  sheet<-sheet %>% mutate(across(all_of(input$avail),~case_when(.=="Y"~1,.=="Yes"~1,.=="N"~0,.=="No"~0,.=="M"~0.5,.=="Maybe"~0.5,.default = 0))) %>% 
+      #    mutate(Availability=rowSums(pick(all_of(input$avail))))
+      #}
+      
+      sheet<-teams()
+      
+      if(!is.null(input$shortTeamsTable_cells_selected)){
+        print(input$shorTeamsTable_cells_selected)
+        #locked <- sheet %>% filter(Name %in% locked())
+        #sheet <- sheet %>% filter(!Name %in% locked())
+        locked <- which(sheet$Name %in% locked())
       }
       
       mt <- sheet %>% filter(Gender=="M") %>%  
@@ -249,7 +269,18 @@ server <- function(input, output) {
                Score=rowMeans(pick(c(Skill,Fitness)))) %>%
         arrange(desc(Experience),desc(Availability),desc(Score)) 
     
-      idx<-seq(1,nrow(mt),input$teams) %>% map(function(x){sample(x:min(((x+input$teams)-1),nrow(mt)),min(input$teams,(nrow(mt)-x)+1))}) %>% unlist()
+      idx<-seq(1,nrow(mt),teamNum()) %>% map(function(x){sample(x:min(((x+teamNum())-1),nrow(mt)),min(teamNum(),(nrow(mt)-x)+1))}) %>% unlist()
+      
+      if(!is.null(locked())){
+        newidx=idx
+        for(i in locked){
+          newidx=swap_idx(i,newidx,teamdf)
+        }
+        idx=newidx
+        #teamdf<-bind_rows(teamdf,locked) %>% 
+        #  arrange(Gender,desc(Experience),desc(Availability),desc(Score))
+      }
+      
       mt<-mt[idx,]
       
       mt<- mt %>% mutate(Team=rep(morder,length.out = n()))
@@ -258,15 +289,25 @@ server <- function(input, output) {
         mutate(Score=rowMeans(pick(c(Skill,Fitness)))) %>%
         arrange(desc(Experience),desc(Availability),desc(Score))
       
-      idx<-seq(1,nrow(ft),input$teams) %>% map(function(x){sample(x:min(((x+input$teams)-1),nrow(ft)),min(input$teams,(nrow(ft)-x)+1))}) %>% unlist()
+      idx<-seq(1,nrow(ft),teamNum()) %>% map(function(x){sample(x:min(((x+teamNum())-1),nrow(ft)),min(teamNum(),(nrow(ft)-x)+1))}) %>% unlist()
       ft<-ft[idx,]
       
       ft<- ft %>% mutate(Team=rep(forder,length.out = n()))
       
       teamdf<-bind_rows(mt,ft)
+      
+      if(!is.null(locked())){
+        newidx=idx
+        for(i in locked){
+          newidx=swap_idx(i,newidx,teamdf)
+        }
+        idx=newidx
+        #teamdf<-bind_rows(teamdf,locked) %>% 
+        #  arrange(Gender,desc(Experience),desc(Availability),desc(Score))
+      }
     
       teams(teamdf)
-      teamNum(input$teams)
+    
     }  
   })
   
@@ -325,7 +366,7 @@ server <- function(input, output) {
     if(!is.null(teams())){
       df<-shortTeams()
       
-      dt<-DT::datatable(df,
+      dt<-DT::datatable(df,selection=list(target = 'cell'),
                     options = list(pageLength = -1, info = FALSE,
                                    lengthMenu = list(c(-1,50), c("All","50")))) %>% 
         formatStyle(names(df)[-1], color=styleEqual(teams() %>% filter(Gender=="F") %>% pull(Name),fcol)) %>% 
