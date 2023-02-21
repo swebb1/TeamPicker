@@ -1,0 +1,113 @@
+# TeamPicker
+
+### Input Spreadsheet
+
+1.  Add a link to a Google Spreadsheet. Sharing must be turned on.
+2.  Upload an excel file.
+3.  The spreadsheet must have the following columns:
+    1.  Name.
+
+    2.  Gender.
+
+    3.  Experience.
+
+    4.  Skill.
+
+    5.  Fitness.
+
+### Make Teams
+
+1.  Once the spreadsheet loads you will see the data in the **Raw Data** tab.
+2.  Use the **Team options** and **Customisation** tabs to alter team parameters.
+3.  Hit the **Make** button to create teams.
+
+### Player Ranking
+
+1.  Players are given a **Score** which is the mean of the Skill and Fitness columns in the raw data. You can adjust the weights given to Skill and Fitness in the **Customisation** menu.
+2.  Players in the spreadsheet are ordered by the following variables:
+    1.  Gender (to split Male and Female matching players).
+
+    2.  Experience (Experience levels can switched in **Customisation**).
+
+    3.  Availability (always 1 if no availability columns selected in **Customisation**).
+
+    4.  Score.
+3.  Players are allocated to a team based on this ranking.
+
+### Snake Draw
+
+The default is to draw teams by *snaking* through the ranking for all male players, then in reverse for female players. The draw for female players is reversed to stop the same team from getting the top male and female players.
+
+E.g. If there were four teams selected the draw would be as follows:
+
+| Gender | Player Rank | Team |
+|--------|-------------|------|
+| Male   | 1           | 1    |
+| Male   | 2           | 2    |
+| Male   | 3           | 3    |
+| Male   | 4           | 4    |
+| Male   | 5           | 4    |
+| Male   | 6           | 3    |
+| Male   | 7           | 2    |
+| Male   | 8           | 1    |
+| Female | 1           | 4    |
+| Female | 2           | 3    |
+| Female | 3           | 2    |
+| Female | 4           | 1    |
+| Female | 5           | 1    |
+| Female | 6           | 2    |
+| Female | 7           | 3    |
+| Female | 8           | 4    |
+
+Depending on the number of players and teams, a snake draw can create some imbalances in number of players per team and relative number of beginners/elite players.
+
+Un-checking the **Snake draw** box will instead perform an iterative draw:
+
+| Gender | Player Rank | Team |
+|--------|-------------|------|
+| Male   | 1           | 1    |
+| Male   | 2           | 2    |
+| Male   | 3           | 3    |
+| Male   | 4           | 4    |
+| Male   | 5           | 1    |
+| Male   | 6           | 2    |
+| Male   | 7           | 3    |
+| Male   | 8           | 4    |
+| Female | 1           | 4    |
+| Female | 2           | 3    |
+| Female | 3           | 2    |
+| Female | 4           | 1    |
+| Female | 5           | 4    |
+| Female | 6           | 3    |
+| Female | 7           | 2    |
+| Female | 8           | 1    |
+
+### Shuffle Teams
+
+The **Shuffle** button allows you to shuffle players of similar ranking into different teams. Shuffling only occurs within the same player rank per team. For instance, if there are four teams, the top ranked players in each team are randomly assigned one of the four teams. These players cannot end up on the same team by shuffling. This is repeated for the second ranked players in each team, and so on.
+
+It is possible to **lock** players on a team by selecting their name in the **Team Summary** table before hitting the **Shuffle** button.
+
+### Team Summary
+
+The **Team Summary** tab has three tables:
+
+1.  Teams - With names only.
+2.  Team statistics - Breakdown of team players and mean scores.
+3.  Team availability (when availability columns selected) - Availability for each session. This can be broken down by Gender and Experience by using the drop down menu.
+
+### Customisation Options
+
+The **Customisation** menu enables changes to the way data is interpreted.
+
+**Column mappings:** Currently disabled.
+
+**Experience order:** Drag and drop the experience levels to set the desired order. Least experienced should be on the top.
+
+**Select availability columns:** Select columns from your data with availability information. This should contain the values *Yes, No* or *Maybe* ( or *Y/N/M* ). An availability score is then computed from the sum of Yes (1) and Maybe (0.5) answers. Availability is used to rank players within an experience category.
+
+### Exporting Teams
+
+1.  Enter a name for the output file.
+2.  Hit the **Download** button.
+3.  Teams are exported as an Excel file containing the **Team summary** and **Full Team** tables.

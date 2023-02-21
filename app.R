@@ -86,12 +86,23 @@ ui <- fluidPage(
         # Show a plot of the generated distribution
         mainPanel(
           tabsetPanel(type = "tabs",
-                      tabPanel("Raw data", br(),DT::dataTableOutput("raw")),
-                      tabPanel("Player ranking",  br(),DT::dataTableOutput("ts")),
-                      tabPanel("Team summary",  br(),DT::dataTableOutput("shortTeamsTable"),
+                      tabPanel("Raw data", br(),DT::dataTableOutput("raw"),style = "overflow-y:scroll; max-height: 600px"),
+                      tabPanel("Player ranking",  br(),DT::dataTableOutput("ts"),style = "overflow-y:scroll; max-height: 600px"),
+                      tabPanel("Team summary",  br(),
+                               headerPanel(title = "Teams"),
+                               helpText("Select cells to lock players in teams while shuffling"),
+                               DT::dataTableOutput("shortTeamsTable"),
+                               br(),
+                               headerPanel(title = "Team Summary"),
+                               br(),
                                DT::dataTableOutput("teamsSummary"),
-                               DT::dataTableOutput("availSummary")),
-                      tabPanel("Full team info", br(),DT::dataTableOutput("teamsTable")) 
+                               br(),
+                               headerPanel(title = "Team Availability"),
+                               br(),
+                               uiOutput("avail_summary"),
+                               DT::dataTableOutput("availSummary"),style = "overflow-y:scroll; max-height: 600px"),
+                      tabPanel("Full team info", br(),DT::dataTableOutput("teamsTable"),style = "overflow-y:scroll; max-height: 600px"),
+                      tabPanel("Help", br(),includeHTML("Help.html"),style = "overflow-y:scroll; max-height: 600px") 
           )
         )
     )
@@ -99,7 +110,7 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-
+  
   teamCols<-c("white",paletteer::paletteer_d("rcartocolor::Pastel", 12))
   mcol<-"#0F3045"
   fcol<-"#570049"
@@ -126,10 +137,17 @@ server <- function(input, output) {
   
   output$availability<-renderUI({
     tagList(
-      selectInput(inputId = "avail",label="Select date columns:",multiple = T,selectize = T,choices = names(fetchSheet()))
+      selectInput(inputId = "avail",label="Select availability columns:",multiple = T,selectize = T,choices = names(fetchSheet()))
          )
   })
   outputOptions(output, 'availability', suspendWhenHidden=FALSE)
+  
+  output$avail_summary<-renderUI({
+    tagList(
+      selectInput(inputId = "avail_sum",label="Summarise by",multiple = T,selectize = T,
+                  choices = c("Gender","Experience"),selected = "Team")
+    )
+  })
   
   ## Reactive values and functions
   teams<-reactiveVal(NULL)
@@ -400,15 +418,17 @@ server <- function(input, output) {
   
   output$availSummary<-DT::renderDataTable({
     if(!is.null(teams()) & !is.null(input$avail)){
+      if(input$avail[1] %in% names(teams())){
       
-      df<-teams() %>% select(Team,Gender,Experience,all_of(input$avail)) %>%
-        summarise(across(all_of(input$avail),sum),.by = c(Team,Gender,Experience)) %>% 
-        arrange(Team,Experience,Gender)
-      
-      DT::datatable(df,options = list(pageLength = -1, info = FALSE,
-                                       lengthMenu = list(c(-1,50), c("All","50")))) %>% 
-        formatStyle("Team", target = 'row', 
-                    backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()]))
+        df<-teams() %>% select(Team,Gender,Experience,all_of(input$avail)) %>%
+          summarise(across(all_of(input$avail),sum),.by = all_of(c("Team",input$avail_sum))) %>% #c(Team,Gender,Experience)) %>% 
+          arrange(pick(c("Team",input$avail_sum))) #Team,Experience,Gender)
+        
+        DT::datatable(df,options = list(pageLength = -1, info = FALSE,
+                                         lengthMenu = list(c(-1,50), c("All","50")))) %>% 
+          formatStyle("Team", target = 'row', 
+                      backgroundColor = styleEqual(1:teamNum(),teamCols[1:teamNum()]))
+      }
     }
   })
   
@@ -418,7 +438,11 @@ server <- function(input, output) {
       paste0(input$saveFile,".xlsx")
     },
     content = function(file) {
-      write_xlsx(shortTeams(),file,col_names = T,format_headers = T)
+      if(!is.null(teams())){
+        sheets <- list("Teams" = shortTeams(), 
+                       "Full breakdown" = teams() %>% arrange(Team,Gender,Experience,Score))
+        write_xlsx(sheets,file,col_names = T,format_headers = T)
+      }
     }
   )
     
