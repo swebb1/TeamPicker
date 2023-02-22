@@ -22,7 +22,6 @@ library(writexl)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
-
     # Application title
     #titlePanel("Team Picker"),
     titlePanel(title=div(img(src="GlasgowUltimateLogo2013.jpg",height="10%", width="10%"), "TeamPicker",style="position:fixed")),
@@ -69,11 +68,16 @@ ui <- fluidPage(
             ),
             tabPanel("Customisation", fluid = TRUE,
               br(),
-              textAreaInput("columns",label = "Column mappings"),
               uiOutput("experience"),
-              uiOutput("availability")
+              uiOutput("availability"),
+              textInput(inputId = "name_col",value = "Name",label = "Name column"),
+              textInput(inputId = "gender_col",value = "Gender",label = "Gender column"),
+              textInput(inputId = "experience_col",value = "Experience",label = "Experience column"),
+              textInput(inputId = "skill_col",value = "Skill",label = "Skill column"),
+              textInput(inputId = "fitness_col",value = "Fitness",label = "Fitness column"),
             ),
             footer = tagList(
+              h4("Export"),
               textInput("saveFile","File name",value = "Teams"),
               downloadButton("save", "Download Teams")
             ),
@@ -89,15 +93,15 @@ ui <- fluidPage(
                       tabPanel("Raw data", br(),DT::dataTableOutput("raw"),style = "overflow-y:scroll; max-height: 600px"),
                       tabPanel("Player ranking",  br(),DT::dataTableOutput("ts"),style = "overflow-y:scroll; max-height: 600px"),
                       tabPanel("Team summary",  br(),
-                               headerPanel(title = "Teams"),
+                               h3("Teams"),
                                helpText("Select cells to lock players in teams while shuffling"),
                                DT::dataTableOutput("shortTeamsTable"),
                                br(),
-                               headerPanel(title = "Team Summary"),
+                               h3("Team Summary"),
                                br(),
                                DT::dataTableOutput("teamsSummary"),
                                br(),
-                               headerPanel(title = "Team Availability"),
+                               h3("Team Availability"),
                                br(),
                                uiOutput("avail_summary"),
                                DT::dataTableOutput("availSummary"),style = "overflow-y:scroll; max-height: 600px"),
@@ -176,7 +180,7 @@ server <- function(input, output) {
         {
           print(input$upload$datapath)
           s<-read_xlsx(input$upload$datapath) %>% 
-            #select(Name,Gender,Experience,Skill,Fitness) %>% 
+            select(Name=input$name_col,Gender,Experience,Skill,Fitness) %>% 
             mutate(across(c(Gender,Experience),as.factor),
                    Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
           
@@ -201,8 +205,8 @@ server <- function(input, output) {
     else{
       tryCatch({
         s<-read_sheet(input$sheet) %>% 
-        #select(Name,Gender,Experience,Skill,Fitness) %>% 
-        mutate(across(c(Gender,Experience),as.factor),
+          select(Name=input$name_col,Gender,Experience,Skill,Fitness) %>% 
+          mutate(across(c(Gender,Experience),as.factor),
                         Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
         
         exp_levels(s %>% pull(Experience) %>% 

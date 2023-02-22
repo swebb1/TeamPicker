@@ -100,11 +100,11 @@ The **Team Summary** tab has three tables:
 
 The **Customisation** menu enables changes to the way data is interpreted.
 
-**Column mappings:** Currently disabled.
-
 **Experience order:** Drag and drop the experience levels to set the desired order. Least experienced should be on the top.
 
 **Select availability columns:** Select columns from your data with availability information. This should contain the values *Yes, No* or *Maybe* ( or *Y/N/M* ). An availability score is then computed from the sum of Yes (1) and Maybe (0.5) answers. Availability is used to rank players within an experience category.
+
+**Column mappings:** Enter the names of column headers in the raw data that correspond to the required columns.
 
 ### Exporting Teams
 
