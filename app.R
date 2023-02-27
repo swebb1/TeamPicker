@@ -180,7 +180,7 @@ server <- function(input, output) {
         {
           print(input$upload$datapath)
           s<-read_xlsx(input$upload$datapath) %>% 
-            select(Name=input$name_col,Gender,Experience,Skill,Fitness) %>% 
+            select(Name=input$name_col,Gender=input$gender_col,Experience=Experience$experience_col,Skill=input$skill_col,Fitness=input$fitness_col) %>% 
             mutate(across(c(Gender,Experience),as.factor),
                    Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
           
@@ -205,7 +205,7 @@ server <- function(input, output) {
     else{
       tryCatch({
         s<-read_sheet(input$sheet) %>% 
-          select(Name=input$name_col,Gender,Experience,Skill,Fitness) %>% 
+          select(Name=input$name_col,Gender=input$gender_col,Experience=Experience$experience_col,Skill=input$skill_col,Fitness=input$fitness_col) %>% 
           mutate(across(c(Gender,Experience),as.factor),
                         Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
         
@@ -410,7 +410,7 @@ server <- function(input, output) {
                   Female=sum(Gender=="F"),
                   Skill=mean(Skill),
                   Fitness=mean(Fitness),
-                  Score=mean(Score)) %>% 
+                  Score=mean(Score) %>% sprintf("%.2f",.)) %>% 
         left_join(df1,by = "Team")
         
       DT::datatable(df2,options = list(pageLength = -1, info = FALSE,
