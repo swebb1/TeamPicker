@@ -407,8 +407,8 @@ server <- function(input, output) {
       df2<-df %>% 
         summarise(Male=sum(Gender=="M"),
                   Female=sum(Gender=="F"),
-                  Skill=mean(Skill),
-                  Fitness=mean(Fitness),
+                  Skill=mean(Skill) %>% sprintf("%.2f",.),
+                  Fitness=mean(Fitness) %>% sprintf("%.2f",.),
                   Score=mean(Score) %>% sprintf("%.2f",.)) %>% 
         left_join(df1,by = "Team")
         
