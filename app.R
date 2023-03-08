@@ -419,6 +419,7 @@ server <- function(input, output) {
     }
   })
   
+  ## Summarise availability
   output$availSummary<-DT::renderDataTable({
     if(!is.null(teams()) & !is.null(input$avail)){
       if(input$avail[1] %in% names(teams())){
