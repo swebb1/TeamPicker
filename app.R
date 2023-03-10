@@ -179,7 +179,7 @@ server <- function(input, output) {
       tryCatch(
         {
           s<-read_xlsx(input$upload$datapath) %>% 
-            select(Name=input$name_col,Gender=input$gender_col,Experience=input$experience_col,Skill=input$skill_col,Fitness=input$fitness_col) %>% 
+            rename(Name=input$name_col,Gender=input$gender_col,Experience=input$experience_col,Skill=input$skill_col,Fitness=input$fitness_col) %>% 
             mutate(across(c(Gender,Experience),as.factor),
                    Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
           
@@ -204,7 +204,7 @@ server <- function(input, output) {
     else{
       tryCatch({
         s<-read_sheet(input$sheet) %>% 
-          select(Name=input$name_col,Gender=input$gender_col,Experience=input$experience_col,Skill=input$skill_col,Fitness=input$fitness_col) %>% 
+          rename(Name=input$name_col,Gender=input$gender_col,Experience=input$experience_col,Skill=input$skill_col,Fitness=input$fitness_col) %>% 
           mutate(across(c(Gender,Experience),as.factor),
                  Gender = fct_recode(Gender,"M"="Male","F"="Female") %>% fct_relevel("M","F"))
         
