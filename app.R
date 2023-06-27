@@ -293,9 +293,17 @@ server <- function(input, output) {
       locked_idx_f <- which(fsheet$Name %in% locked())
       
       ## Shuffle Males within player number
-      mt <- sheet %>% filter(Gender=="M") 
-      idx<-seq(1,nrow(mt),teamNum()) %>% map(function(x){sample(x:min(((x+teamNum())-1),nrow(mt)),min(teamNum(),(nrow(mt)-x)+1))}) %>% unlist()
-      
+      mt <- sheet %>% filter(Gender=="M")
+      idx<-seq(1,nrow(mt),teamNum()) %>% 
+        map(function(x){
+          if(x==nrow(mt)){
+            x
+          }
+          else{
+            sample(x:min(((x+teamNum())-1),nrow(mt)),min(teamNum(),(nrow(mt)-x)+1))
+          }
+        }) %>% unlist()
+
       ## Swap back the locked positions
       newidx=idx
       for(i in locked_idx_m){
@@ -309,7 +317,15 @@ server <- function(input, output) {
       
       ## Repeat for female side
       ft <- sheet %>% filter(Gender=="F")
-      idx<-seq(1,nrow(ft),teamNum()) %>% map(function(x){sample(x:min(((x+teamNum())-1),nrow(ft)),min(teamNum(),(nrow(ft)-x)+1))}) %>% unlist()
+      idx<-seq(1,nrow(ft),teamNum()) %>% 
+        map(function(x){
+          if(x==nrow(ft)){
+            x
+          }
+          else{
+            sample(x:min(((x+teamNum())-1),nrow(ft)),min(teamNum(),(nrow(ft)-x)+1))
+          }
+        }) %>% unlist()
       
       newidx=idx
       for(i in locked_idx_f){
