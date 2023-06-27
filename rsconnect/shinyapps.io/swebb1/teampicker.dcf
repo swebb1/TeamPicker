@@ -5,9 +5,7 @@ account: swebb1
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 8279837
-bundleId: 6941356
+bundleId: 7392759
 url: https://swebb1.shinyapps.io/teampicker/
-when: 1678451691.50095
-lastSyncTime: 1678451691.50096
-asMultiple: FALSE
-asStatic: FALSE
+when: 1687863795.3667
+lastSyncTime: 1687863795.36674
